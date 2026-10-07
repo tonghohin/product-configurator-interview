@@ -1,5 +1,10 @@
 import type { CollectionConfig } from "payload";
-import { generalStatusField, handleField, titleField } from "./common";
+import {
+	catalogField,
+	generalStatusField,
+	handleField,
+	titleField,
+} from "./common";
 
 export const Clients: CollectionConfig = {
 	slug: "clients",
@@ -29,5 +34,6 @@ export const Clients: CollectionConfig = {
 			collection: "organizations",
 			on: "client",
 		},
+		catalogField,
 	],
 };

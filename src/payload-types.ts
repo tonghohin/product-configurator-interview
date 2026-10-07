@@ -213,6 +213,16 @@ export interface Client {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
+  /**
+   * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
+   */
+  catalog?: {
+    products?: (number | Product)[] | null;
+    /**
+     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
+     */
+    skus?: (number | Skus)[] | null;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -231,6 +241,16 @@ export interface Organization {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
+  /**
+   * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
+   */
+  catalog?: {
+    products?: (number | Product)[] | null;
+    /**
+     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
+     */
+    skus?: (number | Skus)[] | null;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -244,6 +264,16 @@ export interface Location {
   status: 'draft' | 'active' | 'archived';
   organization: number | Organization;
   address: string;
+  /**
+   * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
+   */
+  catalog?: {
+    products?: (number | Product)[] | null;
+    /**
+     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
+     */
+    skus?: (number | Skus)[] | null;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -483,6 +513,12 @@ export interface ClientsSelect<T extends boolean = true> {
   legal_name?: T;
   legal_address?: T;
   organizations?: T;
+  catalog?:
+    | T
+    | {
+        products?: T;
+        skus?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -496,6 +532,12 @@ export interface OrganizationsSelect<T extends boolean = true> {
   title?: T;
   client?: T;
   locations?: T;
+  catalog?:
+    | T
+    | {
+        products?: T;
+        skus?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -508,6 +550,12 @@ export interface LocationsSelect<T extends boolean = true> {
   status?: T;
   organization?: T;
   address?: T;
+  catalog?:
+    | T
+    | {
+        products?: T;
+        skus?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }

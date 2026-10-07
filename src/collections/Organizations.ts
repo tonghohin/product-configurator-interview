@@ -1,5 +1,10 @@
 import type { CollectionConfig } from "payload";
-import { generalStatusField, handleField, titleField } from "./common";
+import {
+	catalogField,
+	generalStatusField,
+	handleField,
+	titleField,
+} from "./common";
 
 export const Organizations: CollectionConfig = {
 	slug: "organizations",
@@ -23,5 +28,6 @@ export const Organizations: CollectionConfig = {
 			collection: "locations",
 			on: "organization",
 		},
+		catalogField,
 	],
 };

@@ -1,5 +1,5 @@
 import type { CollectionConfig } from "payload";
-import { generalStatusField, titleField } from "./common";
+import { catalogField, generalStatusField, titleField } from "./common";
 
 export const Locations: CollectionConfig = {
 	slug: "locations",
@@ -21,5 +21,6 @@ export const Locations: CollectionConfig = {
 			type: "text",
 			required: true,
 		},
+		catalogField,
 	],
 };
