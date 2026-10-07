@@ -19,6 +19,12 @@ export const Skus: CollectionConfig = {
 			type: "relationship",
 			relationTo: "productOptionValues",
 			hasMany: true,
+			filterOptions: ({ data }) => {
+				const product = data?.product;
+				const productId = typeof product === "object" ? product?.id : product;
+				if (!productId) return false;
+				return { "productOption.product": { equals: productId } };
+			},
 		},
 	],
 };
