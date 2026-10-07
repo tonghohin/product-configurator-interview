@@ -321,7 +321,7 @@ export interface ProductOptionValue {
 export interface Skus {
   id: number;
   product: number | Product;
-  productOptionValues?: (number | ProductOptionValue)[] | null;
+  productOptionValues: (number | ProductOptionValue)[];
   updatedAt: string;
   createdAt: string;
 }
