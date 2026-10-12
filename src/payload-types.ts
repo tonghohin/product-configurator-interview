@@ -97,6 +97,7 @@ export interface Config {
     products: {
       options: 'productOptions';
       skus: 'skus';
+      catalogEntries: 'catalogEntries';
     };
     productOptions: {
       values: 'productOptionValues';
@@ -334,6 +335,14 @@ export interface Product {
   };
   skus?: {
     docs?: (number | Skus)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  /**
+   * Clients, organizations and locations whose catalog includes this product.
+   */
+  catalogEntries?: {
+    docs?: (number | CatalogEntry)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
@@ -604,6 +613,7 @@ export interface ProductsSelect<T extends boolean = true> {
   attributes?: T;
   options?: T;
   skus?: T;
+  catalogEntries?: T;
   updatedAt?: T;
   createdAt?: T;
 }

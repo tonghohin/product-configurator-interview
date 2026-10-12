@@ -39,5 +39,17 @@ export const Products: CollectionConfig = {
 			collection: "skus",
 			on: "product",
 		},
+		{
+			name: "catalogEntries",
+			label: "Offered By",
+			type: "join",
+			collection: "catalogEntries",
+			on: "product",
+			admin: {
+				defaultColumns: ["client", "organization", "location", "skus"],
+				description:
+					"Clients, organizations and locations whose catalog includes this product.",
+			},
+		},
 	],
 };
