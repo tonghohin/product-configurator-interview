@@ -37,6 +37,9 @@ export default async function HomePage() {
 					>
 						Go to admin panel
 					</a>
+					<a className="docs" href="/order">
+						Order
+					</a>
 					<a
 						className="docs"
 						href="https://payloadcms.com/docs"

@@ -162,3 +162,132 @@ svg {
     }
   }
 }
+
+.order {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 45px 16px;
+
+  h1 {
+    margin-top: 0;
+  }
+
+  h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+  }
+
+  ul {
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+  }
+
+  select,
+  button {
+    font: inherit;
+    font-size: 16px;
+    border-radius: 4px;
+    border: 1px solid rgb(120, 120, 120);
+  }
+
+  select {
+    width: 100%;
+    padding: 6px 8px;
+    color: rgb(255, 255, 255);
+    background: rgb(30, 30, 30);
+
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+
+  button {
+    padding: 4px 14px;
+    color: rgb(0, 0, 0);
+    background: rgb(255, 255, 255);
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+}
+
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .configurator {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 0;
+    padding: 16px;
+    border: 1px solid rgb(60, 60, 60);
+    border-radius: 4px;
+  }
+
+  .resolved,
+  .selection li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .selection li {
+    padding: 6px 0;
+  }
+
+  .selection li + li {
+    border-top: 1px solid rgb(60, 60, 60);
+  }
+
+  .notice,
+  .error {
+    margin: 0;
+  }
+
+  .notice {
+    color: rgb(180, 180, 180);
+  }
+
+  .error {
+    color: rgb(255, 120, 120);
+  }
+}
+
+.spinner-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgb(180, 180, 180);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgb(90, 90, 90);
+  border-top-color: rgb(255, 255, 255);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation-duration: 2.4s;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

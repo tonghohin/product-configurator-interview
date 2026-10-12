@@ -1,5 +1,6 @@
 import type { PaginatedDocs, Payload, PayloadRequest, Where } from "payload";
 import { extractID } from "payload/shared";
+import type { ProductConfiguration, SelectedSku } from "@/lib/configurator";
 import type { CatalogEntry, Product, Skus as Sku } from "@/payload-types";
 
 export type CatalogSource = "location" | "organization" | "client";
@@ -127,6 +128,29 @@ const emptyPage = <T>(limit: number): PaginatedDocs<T> => ({
 	totalPages: 1,
 });
 
+/** The location's entry for an active product, or null if it can't choose it */
+const getActiveEntry = async (
+	payload: Payload,
+	locationId: number,
+	productId: number,
+	{ req }: ResolverOptions = {},
+): Promise<EntryIds | null> => {
+	const [{ entries }, product] = await Promise.all([
+		getLocationCatalog(payload, locationId, { req }),
+		payload.findByID({
+			collection: "products",
+			id: productId,
+			select: { status: true },
+			depth: 0,
+			disableErrors: true,
+			req,
+		}),
+	]);
+	const entry = entries.find((candidate) => candidate.product === productId);
+	if (!entry || product?.status !== "active") return null;
+	return entry;
+};
+
 /** One page of the SKUs of a product that a location can choose from */
 export const getAvailableSkus = async (
 	payload: Payload,
@@ -141,19 +165,8 @@ export const getAvailableSkus = async (
 		limit?: number;
 	} = {},
 ): Promise<PaginatedDocs<Sku>> => {
-	const [{ entries }, product] = await Promise.all([
-		getLocationCatalog(payload, locationId, { req }),
-		payload.findByID({
-			collection: "products",
-			id: productId,
-			select: { status: true },
-			depth: 0,
-			disableErrors: true,
-			req,
-		}),
-	]);
-	const entry = entries.find((candidate) => candidate.product === productId);
-	if (!entry || product?.status !== "active") return emptyPage(limit);
+	const entry = await getActiveEntry(payload, locationId, productId, { req });
+	if (!entry) return emptyPage(limit);
 
 	return payload.find({
 		collection: "skus",
@@ -163,4 +176,123 @@ export const getAvailableSkus = async (
 		limit,
 		req,
 	});
+};
+
+/**
+ * A product's options with only the values its allowed SKUs use, plus those
+ * SKUs; null if the location can't choose the product
+ */
+export const getProductConfiguration = async (
+	payload: Payload,
+	locationId: number,
+	productId: number,
+	{ req }: ResolverOptions = {},
+): Promise<ProductConfiguration | null> => {
+	const entry = await getActiveEntry(payload, locationId, productId, { req });
+	if (!entry) return null;
+
+	const [{ docs: skuDocs }, { docs: optionDocs }] = await Promise.all([
+		payload.find({
+			collection: "skus",
+			where: skuWhereForEntry(entry),
+			select: { productOptionValues: true },
+			depth: 0,
+			pagination: false,
+			req,
+		}),
+		payload.find({
+			collection: "productOptions",
+			where: { product: { equals: productId } },
+			select: { title: true },
+			sort: "createdAt",
+			depth: 0,
+			pagination: false,
+			req,
+		}),
+	]);
+	const skus = skuDocs.map((sku) => ({
+		id: sku.id,
+		valueIds: (sku.productOptionValues ?? []).map(extractID),
+	}));
+	const usedValueIds = [...new Set(skus.flatMap((sku) => sku.valueIds))];
+
+	const { docs: valueDocs } =
+		usedValueIds.length > 0
+			? await payload.find({
+					collection: "productOptionValues",
+					where: { id: { in: usedValueIds } },
+					select: { title: true, productOption: true },
+					sort: "createdAt",
+					depth: 0,
+					pagination: false,
+					req,
+				})
+			: { docs: [] };
+
+	const options = optionDocs.map((option) => ({
+		id: option.id,
+		title: option.title,
+		values: valueDocs
+			.filter((value) => extractID(value.productOption) === option.id)
+			.map((value) => ({ id: value.id, title: value.title })),
+	}));
+	return { options, skus };
+};
+
+/**
+ * Splits `skuIds` into the SKUs the location can choose (with display titles)
+ * and the IDs it can't
+ */
+export const getAllowedSkus = async (
+	payload: Payload,
+	locationId: number,
+	skuIds: number[],
+	{ req }: ResolverOptions = {},
+): Promise<{ allowed: SelectedSku[]; rejected: number[] }> => {
+	if (skuIds.length === 0) return { allowed: [], rejected: [] };
+
+	const { entries } = await getLocationCatalog(payload, locationId, { req });
+	const { docs: activeProducts } =
+		entries.length > 0
+			? await payload.find({
+					collection: "products",
+					where: {
+						id: { in: entries.map((entry) => entry.product) },
+						status: { equals: "active" },
+					},
+					select: { status: true },
+					depth: 0,
+					pagination: false,
+					req,
+				})
+			: { docs: [] };
+	const activeIds = new Set(activeProducts.map((product) => product.id));
+	const activeEntries = entries.filter((entry) => activeIds.has(entry.product));
+	if (activeEntries.length === 0) return { allowed: [], rejected: skuIds };
+
+	const { docs } = await payload.find({
+		collection: "skus",
+		where: {
+			and: [
+				{ id: { in: skuIds } },
+				{ or: activeEntries.map(skuWhereForEntry) },
+			],
+		},
+		depth: 1,
+		pagination: false,
+		req,
+	});
+
+	const allowed = docs.map((sku) => ({
+		id: sku.id,
+		productTitle: typeof sku.product === "object" ? sku.product.title : "",
+		valueTitles: (sku.productOptionValues ?? []).map((value) =>
+			typeof value === "object" ? value.title : String(value),
+		),
+	}));
+	const allowedIds = new Set(allowed.map((sku) => sku.id));
+	return {
+		allowed,
+		rejected: skuIds.filter((id) => !allowedIds.has(id)),
+	};
 };
