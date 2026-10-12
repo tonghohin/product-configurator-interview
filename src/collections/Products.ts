@@ -1,10 +1,18 @@
 import type { CollectionConfig } from "payload";
-import { generalStatusField, handleField, titleField } from "./common";
+import {
+	deleteCatalogEntriesOf,
+	generalStatusField,
+	handleField,
+	titleField,
+} from "./common";
 
 export const Products: CollectionConfig = {
 	slug: "products",
 	admin: {
 		useAsTitle: "title",
+	},
+	hooks: {
+		beforeDelete: [deleteCatalogEntriesOf("product")],
 	},
 	fields: [
 		handleField,

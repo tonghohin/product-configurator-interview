@@ -72,6 +72,7 @@ export interface Config {
     clients: Client;
     organizations: Organization;
     locations: Location;
+    catalogEntries: CatalogEntry;
     products: Product;
     productOptions: ProductOption;
     productOptionValues: ProductOptionValue;
@@ -84,9 +85,14 @@ export interface Config {
   collectionsJoins: {
     clients: {
       organizations: 'organizations';
+      catalogEntries: 'catalogEntries';
     };
     organizations: {
       locations: 'locations';
+      catalogEntries: 'catalogEntries';
+    };
+    locations: {
+      catalogEntries: 'catalogEntries';
     };
     products: {
       options: 'productOptions';
@@ -105,6 +111,7 @@ export interface Config {
     clients: ClientsSelect<false> | ClientsSelect<true>;
     organizations: OrganizationsSelect<false> | OrganizationsSelect<true>;
     locations: LocationsSelect<false> | LocationsSelect<true>;
+    catalogEntries: CatalogEntriesSelect<false> | CatalogEntriesSelect<true>;
     products: ProductsSelect<false> | ProductsSelect<true>;
     productOptions: ProductOptionsSelect<false> | ProductOptionsSelect<true>;
     productOptionValues: ProductOptionValuesSelect<false> | ProductOptionValuesSelect<true>;
@@ -216,12 +223,10 @@ export interface Client {
   /**
    * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
    */
-  catalog?: {
-    products?: (number | Product)[] | null;
-    /**
-     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
-     */
-    skus?: (number | Skus)[] | null;
+  catalogEntries?: {
+    docs?: (number | CatalogEntry)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
   };
   updatedAt: string;
   createdAt: string;
@@ -244,12 +249,10 @@ export interface Organization {
   /**
    * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
    */
-  catalog?: {
-    products?: (number | Product)[] | null;
-    /**
-     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
-     */
-    skus?: (number | Skus)[] | null;
+  catalogEntries?: {
+    docs?: (number | CatalogEntry)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
   };
   updatedAt: string;
   createdAt: string;
@@ -267,13 +270,42 @@ export interface Location {
   /**
    * Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.
    */
-  catalog?: {
-    products?: (number | Product)[] | null;
-    /**
-     * Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.
-     */
-    skus?: (number | Skus)[] | null;
+  catalogEntries?: {
+    docs?: (number | CatalogEntry)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
   };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * A product, and optionally some of its SKUs, that a client, organization or location can choose from. Choose exactly one owner. A location uses its own entries if it has any, otherwise its organization's, otherwise its client's.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalogEntries".
+ */
+export interface CatalogEntry {
+  id: number;
+  /**
+   * Applies to every organization and location of this client that has no entries of its own.
+   */
+  client?: (number | null) | Client;
+  /**
+   * Applies to every location of this organization that has no entries of its own. Overrides the client's entries.
+   */
+  organization?: (number | null) | Organization;
+  /**
+   * Applies to this location only. Overrides its organization's and client's entries.
+   */
+  location?: (number | null) | Location;
+  /**
+   * Only active products are offered.
+   */
+  product: number | Product;
+  /**
+   * Select a product first; only its SKUs can be chosen. Leave empty to allow every SKU of the product.
+   */
+  skus?: (number | Skus)[] | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -400,6 +432,10 @@ export interface PayloadLockedDocument {
         value: number | Location;
       } | null)
     | ({
+        relationTo: 'catalogEntries';
+        value: number | CatalogEntry;
+      } | null)
+    | ({
         relationTo: 'products';
         value: number | Product;
       } | null)
@@ -513,12 +549,7 @@ export interface ClientsSelect<T extends boolean = true> {
   legal_name?: T;
   legal_address?: T;
   organizations?: T;
-  catalog?:
-    | T
-    | {
-        products?: T;
-        skus?: T;
-      };
+  catalogEntries?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -532,12 +563,7 @@ export interface OrganizationsSelect<T extends boolean = true> {
   title?: T;
   client?: T;
   locations?: T;
-  catalog?:
-    | T
-    | {
-        products?: T;
-        skus?: T;
-      };
+  catalogEntries?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -550,12 +576,20 @@ export interface LocationsSelect<T extends boolean = true> {
   status?: T;
   organization?: T;
   address?: T;
-  catalog?:
-    | T
-    | {
-        products?: T;
-        skus?: T;
-      };
+  catalogEntries?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "catalogEntries_select".
+ */
+export interface CatalogEntriesSelect<T extends boolean = true> {
+  client?: T;
+  organization?: T;
+  location?: T;
+  product?: T;
+  skus?: T;
   updatedAt?: T;
   createdAt?: T;
 }

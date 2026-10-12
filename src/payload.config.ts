@@ -6,6 +6,7 @@ import { buildConfig, type CollectionConfig } from "payload";
 import sharp from "sharp";
 
 // Collections
+import { CatalogEntries } from "./collections/CatalogEntries";
 import { Clients } from "./collections/Clients";
 import { Locations } from "./collections/Locations";
 import { Media } from "./collections/Media";
@@ -40,6 +41,7 @@ export default buildConfig({
 		withGroup(Clients, "Client"),
 		withGroup(Organizations, "Client"),
 		withGroup(Locations, "Client"),
+		withGroup(CatalogEntries, "Client"),
 		withGroup(Products, "Product"),
 		withGroup(ProductOptions, "Product"),
 		withGroup(ProductOptionValues, "Product"),
@@ -54,6 +56,7 @@ export default buildConfig({
 		client: {
 			url: process.env.DATABASE_URL || "",
 		},
+		transactionOptions: {},
 	}),
 	sharp,
 	plugins: [],

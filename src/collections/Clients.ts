@@ -1,6 +1,7 @@
 import type { CollectionConfig } from "payload";
 import {
-	catalogField,
+	catalogEntriesField,
+	deleteCatalogEntriesOf,
 	generalStatusField,
 	handleField,
 	titleField,
@@ -10,6 +11,9 @@ export const Clients: CollectionConfig = {
 	slug: "clients",
 	admin: {
 		useAsTitle: "title",
+	},
+	hooks: {
+		beforeDelete: [deleteCatalogEntriesOf("client")],
 	},
 	fields: [
 		titleField,
@@ -34,6 +38,6 @@ export const Clients: CollectionConfig = {
 			collection: "organizations",
 			on: "client",
 		},
-		catalogField,
+		catalogEntriesField("client"),
 	],
 };

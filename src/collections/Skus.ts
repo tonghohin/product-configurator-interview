@@ -1,6 +1,8 @@
-import type {
-	CollectionConfig,
-	RelationshipFieldManyValidation,
+import {
+	APIError,
+	type CollectionBeforeDeleteHook,
+	type CollectionConfig,
+	type RelationshipFieldManyValidation,
 } from "payload";
 import { extractID, relationship } from "payload/shared";
 import type { Skus as Sku } from "@/payload-types";
@@ -84,11 +86,34 @@ const validateOptionValues: RelationshipFieldManyValidation = async (
 	return true;
 };
 
+/** A listed SKU can't vanish, or the entry would silently widen to every SKU */
+const preventDeleteWhileInCatalog: CollectionBeforeDeleteHook = async ({
+	id,
+	req,
+}) => {
+	const { totalDocs } = await req.payload.count({
+		collection: "catalogEntries",
+		where: { skus: { in: [id] } },
+		req,
+	});
+	if (totalDocs > 0) {
+		throw new APIError(
+			`SKU is used by ${totalDocs} catalog ${totalDocs === 1 ? "entry" : "entries"}; remove it from them first`,
+			400,
+			undefined,
+			true,
+		);
+	}
+};
+
 export const Skus: CollectionConfig = {
 	slug: "skus",
 	labels: {
 		plural: "SKUs",
 		singular: "SKU",
+	},
+	hooks: {
+		beforeDelete: [preventDeleteWhileInCatalog],
 	},
 	fields: [
 		{

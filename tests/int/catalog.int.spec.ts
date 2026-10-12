@@ -1,100 +1,91 @@
 import { describe, expect, it } from "vitest";
 import {
-	type CatalogIds,
-	pickEffectiveCatalog,
-	pruneOrphanSkus,
-	skuFilterForProduct,
-	toCatalogIds,
+	type EntryIds,
+	pickEffectiveLevel,
+	skuWhereForEntry,
+	toEntryIds,
 } from "@/lib/catalog";
 
-const empty: CatalogIds = { products: [], skus: [] };
-
-// SKU id -> product id
-const skuProductById = new Map([
-	[10, 1],
-	[11, 1],
-	[20, 2],
-	[21, 2],
-]);
-
-describe("toCatalogIds", () => {
+describe("toEntryIds", () => {
 	it("handles raw ids and populated docs", () => {
 		expect(
-			toCatalogIds({ products: [1, { id: 2 }], skus: [{ id: 10 }, 20] }),
-		).toEqual({ products: [1, 2], skus: [10, 20] });
+			toEntryIds({
+				product: { id: 1 } as never,
+				skus: [{ id: 10 } as never, 11],
+			}),
+		).toEqual({ product: 1, skus: [10, 11] });
+		expect(toEntryIds({ product: 2, skus: [20] })).toEqual({
+			product: 2,
+			skus: [20],
+		});
 	});
 
-	it("treats missing values as empty", () => {
-		expect(toCatalogIds(null)).toEqual(empty);
-		expect(toCatalogIds(undefined)).toEqual(empty);
-		expect(toCatalogIds({ products: null, skus: null })).toEqual(empty);
+	it("treats missing skus as empty", () => {
+		expect(toEntryIds({ product: 1, skus: null })).toEqual({
+			product: 1,
+			skus: [],
+		});
+		expect(toEntryIds({ product: 1 })).toEqual({ product: 1, skus: [] });
 	});
 });
 
-describe("pickEffectiveCatalog", () => {
-	const client: CatalogIds = { products: [1], skus: [] };
-	const organization: CatalogIds = { products: [1, 2], skus: [10] };
-	const location: CatalogIds = { products: [2], skus: [] };
+describe("pickEffectiveLevel", () => {
+	const client: EntryIds[] = [{ product: 1, skus: [] }];
+	const organization: EntryIds[] = [
+		{ product: 1, skus: [10] },
+		{ product: 2, skus: [] },
+	];
+	const location: EntryIds[] = [{ product: 2, skus: [] }];
 
 	it("location overrides organization and client entirely", () => {
-		expect(pickEffectiveCatalog([location, organization, client])).toBe(
-			location,
-		);
+		expect(
+			pickEffectiveLevel([
+				["location", location],
+				["organization", organization],
+				["client", client],
+			]),
+		).toEqual({ source: "location", entries: location });
 	});
 
 	it("falls back to organization, then client", () => {
-		expect(pickEffectiveCatalog([empty, organization, client])).toBe(
-			organization,
-		);
-		expect(pickEffectiveCatalog([empty, empty, client])).toBe(client);
-	});
-
-	it("returns null when no level has products", () => {
-		expect(pickEffectiveCatalog([empty, empty, empty])).toBeNull();
-	});
-
-	it("ignores a level with skus but no products", () => {
 		expect(
-			pickEffectiveCatalog([{ products: [], skus: [10] }, empty, client]),
-		).toBe(client);
+			pickEffectiveLevel([
+				["location", []],
+				["organization", organization],
+				["client", client],
+			]),
+		).toEqual({ source: "organization", entries: organization });
+		expect(
+			pickEffectiveLevel([
+				["location", []],
+				["organization", []],
+				["client", client],
+			]),
+		).toEqual({ source: "client", entries: client });
+	});
+
+	it("returns null when no level has entries", () => {
+		expect(
+			pickEffectiveLevel([
+				["location", []],
+				["organization", []],
+				["client", []],
+			]),
+		).toBeNull();
 	});
 });
 
-describe("skuFilterForProduct", () => {
-	const catalog: CatalogIds = { products: [1, 2], skus: [10, 20] };
-
-	it("allows nothing for a product outside the catalog", () => {
-		expect(skuFilterForProduct(catalog, 3, skuProductById)).toEqual({
-			kind: "none",
+describe("skuWhereForEntry", () => {
+	it("allows every SKU of the product when none are listed", () => {
+		expect(skuWhereForEntry({ product: 1, skus: [] })).toEqual({
+			product: { equals: 1 },
 		});
 	});
 
-	it("restricts to the listed SKUs of that product only", () => {
-		expect(skuFilterForProduct(catalog, 1, skuProductById)).toEqual({
-			kind: "only",
-			skuIds: [10],
+	it("restricts to the listed SKUs", () => {
+		expect(skuWhereForEntry({ product: 1, skus: [10, 11] })).toEqual({
+			product: { equals: 1 },
+			id: { in: [10, 11] },
 		});
-	});
-
-	it("allows all SKUs when none of the product's SKUs are listed", () => {
-		expect(
-			skuFilterForProduct({ products: [1, 2], skus: [20] }, 1, skuProductById),
-		).toEqual({ kind: "all" });
-	});
-});
-
-describe("pruneOrphanSkus", () => {
-	it("drops SKUs of removed products and keeps order", () => {
-		expect(pruneOrphanSkus([21, 10, 20, 11], [2], skuProductById)).toEqual([
-			21, 20,
-		]);
-	});
-
-	it("drops SKUs that no longer exist", () => {
-		expect(pruneOrphanSkus([99, 10], [1], skuProductById)).toEqual([10]);
-	});
-
-	it("returns nothing when no products are selected", () => {
-		expect(pruneOrphanSkus([10, 20], [], skuProductById)).toEqual([]);
 	});
 });

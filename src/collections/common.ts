@@ -1,11 +1,9 @@
-import type { Field, FieldHook, TextFieldSingleValidation } from "payload";
-import { extractID } from "payload/shared";
 import {
-	type CatalogValue,
-	pruneOrphanSkus,
-	type Relation,
-} from "@/lib/catalog";
-import type { Client, Location, Organization } from "@/payload-types";
+	APIError,
+	type CollectionBeforeDeleteHook,
+	type Field,
+	type TextFieldSingleValidation,
+} from "payload";
 
 const handlePattern = /^[a-zA-Z0-9-]+$/;
 
@@ -40,68 +38,39 @@ export const generalStatusField: Field = {
 	required: true,
 };
 
-/**
- * Runs before validation so SKUs of a removed product are dropped instead of
- * failing the relationship filterOptions check.
- */
-const pruneCatalogSkus: FieldHook<
-	Client | Organization | Location,
-	Relation[] | null | undefined,
-	NonNullable<CatalogValue>
-> = async ({ value, siblingData, req }) => {
-	if (!value?.length) return value;
-	const skuIds = value.map(extractID);
-	const { docs } = await req.payload.find({
-		collection: "skus",
-		where: { id: { in: skuIds } },
-		select: { product: true },
-		depth: 0,
-		pagination: false,
-		req,
-	});
-	const skuProductById = new Map(
-		docs.map((sku) => [sku.id, extractID(sku.product)]),
-	);
-	return pruneOrphanSkus(
-		skuIds,
-		(siblingData.products ?? []).map(extractID),
-		skuProductById,
-	);
-};
-
-export const catalogField: Field = {
-	name: "catalog",
+export const catalogEntriesField = (
+	on: "client" | "organization" | "location",
+): Field => ({
+	name: "catalogEntries",
 	label: "SKU Catalog",
-	type: "group",
+	type: "join",
+	collection: "catalogEntries",
+	on,
 	admin: {
 		description:
 			"Products and SKUs available here. Overrides the parent's catalog entirely; leave empty to inherit from the parent.",
 	},
-	fields: [
-		{
-			name: "products",
-			type: "relationship",
-			relationTo: "products",
-			hasMany: true,
-		},
-		{
-			name: "skus",
-			label: "SKUs",
-			type: "relationship",
-			relationTo: "skus",
-			hasMany: true,
-			admin: {
-				description:
-					"Leave empty to allow every SKU of the selected products. Listing SKUs of a product restricts that product to those SKUs.",
-			},
-			filterOptions: ({ siblingData }) => {
-				const products = (siblingData as NonNullable<CatalogValue>)?.products;
-				if (!products?.length) return false;
-				return { product: { in: products.map(extractID) } };
-			},
-			hooks: {
-				beforeValidate: [pruneCatalogSkus],
-			},
-		},
-	],
-};
+});
+
+/**
+ * Runs before the delete because the owner/product columns are set to null
+ * once the referenced document is gone, leaving nothing to match on.
+ */
+export const deleteCatalogEntriesOf =
+	(
+		field: "client" | "organization" | "location" | "product",
+	): CollectionBeforeDeleteHook =>
+	async ({ id, req }) => {
+		// A bulk delete reports failures instead of throwing
+		const { errors } = await req.payload.delete({
+			collection: "catalogEntries",
+			where: { [field]: { equals: id } },
+			req,
+		});
+		if (errors.length > 0) {
+			throw new APIError(
+				`Could not delete the catalog entries of this ${field}`,
+				500,
+			);
+		}
+	};

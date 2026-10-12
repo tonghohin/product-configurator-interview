@@ -1,10 +1,18 @@
 import type { CollectionConfig } from "payload";
-import { catalogField, generalStatusField, titleField } from "./common";
+import {
+	catalogEntriesField,
+	deleteCatalogEntriesOf,
+	generalStatusField,
+	titleField,
+} from "./common";
 
 export const Locations: CollectionConfig = {
 	slug: "locations",
 	admin: {
 		useAsTitle: "title",
+	},
+	hooks: {
+		beforeDelete: [deleteCatalogEntriesOf("location")],
 	},
 	fields: [
 		titleField,
@@ -21,6 +29,6 @@ export const Locations: CollectionConfig = {
 			type: "text",
 			required: true,
 		},
-		catalogField,
+		catalogEntriesField("location"),
 	],
 };

@@ -1,72 +1,40 @@
 import type { PaginatedDocs, Payload, PayloadRequest, Where } from "payload";
 import { extractID } from "payload/shared";
-import type { Product, Skus as Sku } from "@/payload-types";
+import type { CatalogEntry, Product, Skus as Sku } from "@/payload-types";
 
-export type Relation = number | { id: number };
+export type CatalogSource = "location" | "organization" | "client";
 
-/** A `catalog` group as stored on clients, organizations and locations */
-export type CatalogValue =
-	| {
-			products?: Relation[] | null;
-			skus?: Relation[] | null;
-	  }
-	| null
-	| undefined;
+/** A catalog entry reduced to IDs; empty `skus` means every SKU of the product */
+export type EntryIds = { product: number; skus: number[] };
 
-export type CatalogIds = { products: number[]; skus: number[] };
+export type LocationCatalog = {
+	source: CatalogSource | null;
+	entries: EntryIds[];
+};
 
-export type SkuFilter =
-	| { kind: "none" }
-	| { kind: "all" }
-	| { kind: "only"; skuIds: number[] };
-
-export const toCatalogIds = (catalog: CatalogValue): CatalogIds => ({
-	products: (catalog?.products ?? []).map(extractID),
-	skus: (catalog?.skus ?? []).map(extractID),
+export const toEntryIds = (
+	entry: Pick<CatalogEntry, "product" | "skus">,
+): EntryIds => ({
+	product: extractID(entry.product),
+	skus: (entry.skus ?? []).map(extractID),
 });
 
 /**
  * Levels are ordered most specific first (location, organization, client).
- * The first level with any products wins outright; levels are never merged.
+ * The first level with any entries wins outright; levels are never merged.
  */
-export const pickEffectiveCatalog = (levels: CatalogIds[]): CatalogIds | null =>
-	levels.find((level) => level.products.length > 0) ?? null;
-
-/**
- * Which SKUs of a product are allowed: none if the product isn't in the
- * catalog, only the listed ones if any of its SKUs are listed, otherwise all.
- */
-export const skuFilterForProduct = (
-	catalog: CatalogIds,
-	productId: number,
-	skuProductById: Map<number, number>,
-): SkuFilter => {
-	if (!catalog.products.includes(productId)) return { kind: "none" };
-	const skuIds = catalog.skus.filter(
-		(skuId) => skuProductById.get(skuId) === productId,
-	);
-	return skuIds.length > 0 ? { kind: "only", skuIds } : { kind: "all" };
+export const pickEffectiveLevel = (
+	levels: [CatalogSource, EntryIds[]][],
+): { source: CatalogSource; entries: EntryIds[] } | null => {
+	const level = levels.find(([, entries]) => entries.length > 0);
+	return level ? { source: level[0], entries: level[1] } : null;
 };
 
-/** Drops SKUs whose product is no longer in the catalog, keeping order */
-export const pruneOrphanSkus = (
-	skuIds: number[],
-	productIds: number[],
-	skuProductById: Map<number, number>,
-): number[] => {
-	const allowed = new Set(productIds);
-	return skuIds.filter((skuId) => {
-		const productId = skuProductById.get(skuId);
-		return productId !== undefined && allowed.has(productId);
-	});
-};
-
-export type CatalogSource = "location" | "organization" | "client";
-
-export type LocationCatalog = {
-	catalog: CatalogIds | null;
-	source: CatalogSource | null;
-};
+/** The SKUs an entry allows: all of its product's, or only the listed ones */
+export const skuWhereForEntry = (entry: EntryIds): Where => ({
+	product: { equals: entry.product },
+	...(entry.skus.length > 0 && { id: { in: entry.skus } }),
+});
 
 type ResolverOptions = { req?: PayloadRequest };
 
@@ -79,33 +47,49 @@ export const getLocationCatalog = async (
 	const location = await payload.findByID({
 		collection: "locations",
 		id: locationId,
-		select: { catalog: true, organization: true },
+		select: { organization: true },
 		depth: 0,
 		req,
 	});
+	const organizationId = extractID(location.organization);
 	const organization = await payload.findByID({
 		collection: "organizations",
-		id: extractID(location.organization),
-		select: { catalog: true, client: true },
+		id: organizationId,
+		select: { client: true },
 		depth: 0,
 		req,
 	});
-	const client = await payload.findByID({
-		collection: "clients",
-		id: extractID(organization.client),
-		select: { catalog: true },
+	const clientId = extractID(organization.client);
+
+	const { docs } = await payload.find({
+		collection: "catalogEntries",
+		where: {
+			or: [
+				{ location: { equals: locationId } },
+				{ organization: { equals: organizationId } },
+				{ client: { equals: clientId } },
+			],
+		},
+		select: {
+			client: true,
+			organization: true,
+			location: true,
+			product: true,
+			skus: true,
+		},
 		depth: 0,
+		pagination: false,
 		req,
 	});
 
-	const levels: [CatalogSource, CatalogIds][] = [
-		["location", toCatalogIds(location.catalog)],
-		["organization", toCatalogIds(organization.catalog)],
-		["client", toCatalogIds(client.catalog)],
-	];
-	const catalog = pickEffectiveCatalog(levels.map(([, ids]) => ids));
-	const source = levels.find(([, ids]) => ids === catalog)?.[0] ?? null;
-	return { catalog, source };
+	const entriesOf = (source: CatalogSource) =>
+		docs.filter((entry) => entry[source] != null).map(toEntryIds);
+	const effective = pickEffectiveLevel([
+		["location", entriesOf("location")],
+		["organization", entriesOf("organization")],
+		["client", entriesOf("client")],
+	]);
+	return effective ?? { source: null, entries: [] };
 };
 
 /** Active products a location can choose from */
@@ -114,13 +98,13 @@ export const getAvailableProducts = async (
 	locationId: number,
 	{ req }: ResolverOptions = {},
 ): Promise<Product[]> => {
-	const { catalog } = await getLocationCatalog(payload, locationId, { req });
-	if (!catalog) return [];
+	const { entries } = await getLocationCatalog(payload, locationId, { req });
+	if (entries.length === 0) return [];
 
 	const { docs } = await payload.find({
 		collection: "products",
 		where: {
-			id: { in: catalog.products },
+			id: { in: entries.map((entry) => entry.product) },
 			status: { equals: "active" },
 		},
 		depth: 0,
@@ -157,10 +141,8 @@ export const getAvailableSkus = async (
 		limit?: number;
 	} = {},
 ): Promise<PaginatedDocs<Sku>> => {
-	const { catalog } = await getLocationCatalog(payload, locationId, { req });
-	if (!catalog) return emptyPage(limit);
-
-	const [product, { docs: catalogSkus }] = await Promise.all([
+	const [{ entries }, product] = await Promise.all([
+		getLocationCatalog(payload, locationId, { req }),
 		payload.findByID({
 			collection: "products",
 			id: productId,
@@ -169,30 +151,13 @@ export const getAvailableSkus = async (
 			disableErrors: true,
 			req,
 		}),
-		payload.find({
-			collection: "skus",
-			where: { id: { in: catalog.skus } },
-			select: { product: true },
-			depth: 0,
-			pagination: false,
-			req,
-		}),
 	]);
-	if (product?.status !== "active") return emptyPage(limit);
-
-	const filter = skuFilterForProduct(
-		catalog,
-		productId,
-		new Map(catalogSkus.map((sku) => [sku.id, extractID(sku.product)])),
-	);
-	if (filter.kind === "none") return emptyPage(limit);
-
-	const where: Where = { product: { equals: productId } };
-	if (filter.kind === "only") where.id = { in: filter.skuIds };
+	const entry = entries.find((candidate) => candidate.product === productId);
+	if (!entry || product?.status !== "active") return emptyPage(limit);
 
 	return payload.find({
 		collection: "skus",
-		where,
+		where: skuWhereForEntry(entry),
 		depth: 0,
 		page,
 		limit,
